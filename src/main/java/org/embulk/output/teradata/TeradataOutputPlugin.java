@@ -14,6 +14,11 @@ import org.embulk.spi.OutputPlugin;
 import org.embulk.spi.PageOutput;
 import org.embulk.spi.Schema;
 import org.embulk.spi.TransactionalPageOutput;
+import org.embulk.input.jdbc.AbstractJdbcOutputPlugin;
+import org.embulk.input.teradata.TeradataOutputConnection;
+
+import org.embulk.spi.Exec;
+import org.slf4j.Logger;
 
 public class TeradataOutputPlugin
         implements OutputPlugin
@@ -21,19 +26,22 @@ public class TeradataOutputPlugin
     public interface PluginTask
             extends Task
     {
-        // configuration option 1 (required integer)
-        @Config("option1")
-        public int getOption1();
+      @Config("host")
+      public String getHost();
 
-        // configuration option 2 (optional string, null is not allowed)
-        @Config("option2")
-        @ConfigDefault("\"myvalue\"")
-        public String getOption2();
+      @Config("port")
+      @ConfigDefault("1025")
+      public int getPort();
 
-        // configuration option 3 (optional string, null is allowed)
-        @Config("option3")
-        @ConfigDefault("null")
-        public Optional<String> getOption3();
+      @Config("user")
+      public String getUser();
+
+      @Config("password")
+      @ConfigDefault("\"\"")
+      public String getPassword();
+
+      @Config("database")
+      public String getDatabase();
     }
 
     @Override
@@ -44,7 +52,7 @@ public class TeradataOutputPlugin
         PluginTask task = config.loadConfig(PluginTask.class);
 
         // retryable (idempotent) output:
-        // return resume(task.dump(), schema, taskCount, control);
+        return resume(task.dump(), schema, taskCount, control);
 
         // non-retryable (non-idempotent) output:
         control.run(task.dump());
@@ -69,9 +77,33 @@ public class TeradataOutputPlugin
     @Override
     public TransactionalPageOutput open(TaskSource taskSource, Schema schema, int taskIndex)
     {
-        PluginTask task = taskSource.loadTask(PluginTask.class);
+        PluginTask t = taskSource.loadTask(PluginTask.class);
 
-        // Write your code here :)
-        throw new UnsupportedOperationException("TeradataOutputPlugin.run method is not implemented yet");
+        String url = String.format("jdbc:teradata://%s",t.getHost());
+
+        Properties props = new Properties();
+	      props.setProperty("database", t.getDatabase());
+        props.setProperty("user", t.getUser());
+        props.setProperty("password", t.getPassword());
+
+        props.putAll(t.getOptions());
+
+        Connection con = driver.connect(url, props);
+
+        try {
+            Statement stmt = con.createStatement();
+            String sql = String.format("select * from dbc.tables;");
+            logger.info("SQL: " + sql);
+            stmt.execute(sql);
+
+            TeradataInputConnection c = new TeradataInputConnection(con);
+            con = null;
+            return c;
+        }
+        finally {
+            if (con != null) {
+                con.close();
+            }
+        }
     }
 }
