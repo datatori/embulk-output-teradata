@@ -1,6 +1,17 @@
 package org.embulk.output.teradata;
 
 import java.util.List;
+import java.util.Properties;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.util.Properties;
+import java.sql.Connection;
+import java.sql.Driver;
+import java.sql.SQLException;
+import java.sql.PreparedStatement;
+import java.sql.Statement;
+import java.util.Properties;
+import java.sql.Connection;
 import com.google.common.base.Optional;
 import org.embulk.config.TaskReport;
 import org.embulk.config.Config;
@@ -14,8 +25,8 @@ import org.embulk.spi.OutputPlugin;
 import org.embulk.spi.PageOutput;
 import org.embulk.spi.Schema;
 import org.embulk.spi.TransactionalPageOutput;
-import org.embulk.input.jdbc.AbstractJdbcOutputPlugin;
-import org.embulk.input.teradata.TeradataOutputConnection;
+import org.embulk.input.jdbc.AbstractJdbcInputPlugin;
+import org.embulk.output.teradata.TeradataOutputConnection;
 
 import org.embulk.spi.Exec;
 import org.slf4j.Logger;
@@ -23,8 +34,12 @@ import org.slf4j.Logger;
 public class TeradataOutputPlugin
         implements OutputPlugin
 {
-    public interface PluginTask
-            extends Task
+
+    private final Logger logger = Exec.getLogger(TeradataOutputPlugin.class);
+    private static final Driver driver = new com.teradata.jdbc.TeraDriver();
+
+    public interface TeradataPluginTask
+            extends org.embulk.input.jdbc.AbstractJdbcInputPlugin.PluginTask
     {
       @Config("host")
       public String getHost();
@@ -49,10 +64,10 @@ public class TeradataOutputPlugin
             Schema schema, int taskCount,
             OutputPlugin.Control control)
     {
-        PluginTask task = config.loadConfig(PluginTask.class);
+        org.embulk.input.jdbc.AbstractJdbcInputPlugin.PluginTask task = config.loadConfig(org.embulk.input.jdbc.AbstractJdbcInputPlugin.PluginTask.class);
 
         // retryable (idempotent) output:
-        return resume(task.dump(), schema, taskCount, control);
+        // return resume(task.dump(), schema, taskCount, control);
 
         // non-retryable (non-idempotent) output:
         control.run(task.dump());
@@ -77,33 +92,38 @@ public class TeradataOutputPlugin
     @Override
     public TransactionalPageOutput open(TaskSource taskSource, Schema schema, int taskIndex)
     {
-        PluginTask t = taskSource.loadTask(PluginTask.class);
+        TeradataPluginTask t = taskSource.loadTask(TeradataPluginTask.class);
 
         String url = String.format("jdbc:teradata://%s",t.getHost());
 
         Properties props = new Properties();
-	      props.setProperty("database", t.getDatabase());
+	props.setProperty("database", t.getDatabase());
         props.setProperty("user", t.getUser());
         props.setProperty("password", t.getPassword());
 
         props.putAll(t.getOptions());
 
-        Connection con = driver.connect(url, props);
 
+	Connection con = null;
         try {
+	    con = driver.connect(url, props);
             Statement stmt = con.createStatement();
             String sql = String.format("select * from dbc.tables;");
             logger.info("SQL: " + sql);
             stmt.execute(sql);
 
-            TeradataInputConnection c = new TeradataInputConnection(con);
+            TeradataOutputConnection c = new TeradataOutputConnection(con);
             con = null;
-            return c;
+	    return null;
         }
+	catch(SQLException se){
+	}
         finally {
+	    /*
             if (con != null) {
                 con.close();
-            }
+		}*/
         }
+	return null;
     }
 }
