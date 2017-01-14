@@ -4,16 +4,16 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import org.slf4j.Logger;
 import org.embulk.spi.Exec;
-import org.embulk.input.jdbc.JdbcInputConnection;
+import org.embulk.output.jdbc.JdbcOutputConnection;
 
 public class TeradataOutputConnection
-        extends JdbcInputConnection
+        extends JdbcOutputConnection
 {
     private final Logger logger = Exec.getLogger(TeradataOutputConnection.class);
 
-    public TeradataOutputConnection(Connection connection)
+    public TeradataOutputConnection(Connection connection, String schemaName)
             throws SQLException
     {
-        super(connection, null);
+        super(connection, schemaName);
     }
 }

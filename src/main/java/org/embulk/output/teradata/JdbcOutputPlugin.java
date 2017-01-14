@@ -1,4 +1,4 @@
-package org.embulk.output.teradata;
+package org.embulk.output;
 
 import java.util.Properties;
 import java.sql.Driver;
@@ -13,14 +13,19 @@ import com.google.common.collect.ImmutableSet;
 import org.embulk.config.Config;
 import org.embulk.config.ConfigDefault;
 import org.embulk.output.jdbc.*;
-import org.embulk.output.teradata.TeradataOutputConnection;
 
-public class TeradataOutputPlugin
+public class JdbcOutputPlugin
         extends AbstractJdbcOutputPlugin
 {
-
     public interface GenericPluginTask extends PluginTask
     {
+        @Config("driver_path")
+        @ConfigDefault("null")
+        public Optional<String> getDriverPath();
+
+        @Config("driver_class")
+        public String getDriverClass();
+
         @Config("url")
         public String getUrl();
 
@@ -61,6 +66,10 @@ public class TeradataOutputPlugin
     {
         GenericPluginTask t = (GenericPluginTask) task;
 
+        if (t.getDriverPath().isPresent()) {
+            loadDriverJar(t.getDriverPath().get());
+        }
+
         Properties props = new Properties();
 
         props.putAll(t.getOptions());
@@ -73,7 +82,8 @@ public class TeradataOutputPlugin
             props.setProperty("password", t.getPassword().get());
         }
 
-        return new GenericOutputConnector(t.getUrl(), props, null, null);
+        return new GenericOutputConnector(t.getUrl(), props, t.getDriverClass(),
+                t.getSchema().orNull());
     }
 
     private static class GenericOutputConnector
@@ -90,7 +100,7 @@ public class TeradataOutputPlugin
             try {
                 // TODO check Class.forName(driverClass) is a Driver before newInstance
                 //      for security
-                this.driver = new com.teradata.jdbc.TeraDriver();
+                this.driver = (Driver) Class.forName(driverClass).newInstance();
             } catch (Exception ex) {
                 throw Throwables.propagate(ex);
             }
