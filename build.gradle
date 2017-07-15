@@ -80,7 +80,7 @@ Gem::Specification.new do |spec|
   spec.description   = %[Dumps records to Teradata.]
   spec.email         = ["ebyhry@gmail.com"]
   spec.licenses      = ["MIT"]
-  spec.homepage      = "https://github.com/ebyhry/embulk-output-teradata"
+  spec.homepage      = "https://github.com/ebyhr/embulk-output-teradata"
 
   spec.files         = `git ls-files`.split("\n") + Dir["classpath/*.jar"]
   spec.test_files    = spec.files.grep(%r"^(test|spec)/")
