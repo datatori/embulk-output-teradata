@@ -1,4 +1,4 @@
-package org.embulk.output.jdbc;
+package org.embulk.output.teradata.jdbc;
 
 import java.util.List;
 import java.nio.charset.Charset;
@@ -10,24 +10,28 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 
+import org.embulk.output.jdbc.JdbcColumn;
+import org.embulk.output.jdbc.JdbcOutputConnection;
+import org.embulk.output.jdbc.JdbcSchema;
+import org.embulk.output.jdbc.MergeConfig;
+import org.embulk.output.jdbc.TableIdentifier;
 import org.slf4j.Logger;
 import com.google.common.base.Optional;
 import org.embulk.spi.Exec;
 
-public class JdbcOutputConnection
-        implements AutoCloseable
+public class TeradataOutputConnection
+        extends JdbcOutputConnection
 {
-    private final Logger logger = Exec.getLogger(JdbcOutputConnection.class);
+    private final Logger logger = Exec.getLogger(TeradataOutputConnection.class);
     protected final Connection connection;
-    protected final String schemaName;
     protected final DatabaseMetaData databaseMetaData;
     protected String identifierQuoteString;
 
-    public JdbcOutputConnection(Connection connection, String schemaName)
+    public TeradataOutputConnection(Connection connection, boolean autoCommit)
             throws SQLException
     {
+        super(connection, null);
         this.connection = connection;
-        this.schemaName = schemaName;
         this.databaseMetaData = connection.getMetaData();
         this.identifierQuoteString = databaseMetaData.getIdentifierQuoteString();
         if (schemaName != null) {
@@ -70,6 +74,16 @@ public class JdbcOutputConnection
         }
     }
 
+    // Teradata doesn't support CREATE TABLE IF NOT EXIST
+    @Override
+    protected String buildCreateTableIfNotExistsSql(TableIdentifier table, JdbcSchema schema) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE TABLE ");
+        this.quoteTableIdentifier(sb, table);
+        sb.append(this.buildCreateTableSchemaSql(schema));
+        return sb.toString();
+    }
+
     public boolean tableExists(String tableName) throws SQLException
     {
         try (ResultSet rs = connection.getMetaData().getTables(null, schemaName, tableName, null)) {
@@ -77,16 +91,12 @@ public class JdbcOutputConnection
         }
     }
 
-    public void dropTableIfExists(String tableName) throws SQLException
+    @Override
+    protected void dropTableIfExists(Statement stmt, TableIdentifier table) throws SQLException
     {
-        Statement stmt = connection.createStatement();
-        try {
-            dropTableIfExists(stmt, tableName);
-            commitIfNecessary(connection);
-        } catch (SQLException ex) {
-            throw safeRollback(connection, ex);
-        } finally {
-            stmt.close();
+        if (tableExists(this.quoteTableIdentifier(table))) {
+            String sql = String.format("DROP TABLE %s", this.quoteTableIdentifier(table));
+            this.executeUpdate(stmt, sql);
         }
     }
 
@@ -222,6 +232,10 @@ public class JdbcOutputConnection
                 return String.format("%s(%d,%d)", simpleTypeName, c.getSizeTypeParameter(), c.getScaleTypeParameter());
             }
         default:  // SIMPLE
+            if (simpleTypeName.equals("CLOB"))
+            {
+                return "VARCHAR(32000)";
+            }
             return simpleTypeName;
         }
     }
@@ -243,23 +257,6 @@ public class JdbcOutputConnection
         "DECIMAL",
         "NUMERIC",
     };
-
-    protected ColumnDeclareType getColumnDeclareType(String convertedTypeName, JdbcColumn col)
-    {
-        for (String x : STANDARD_SIZE_TYPE_NAMES) {
-            if (x.equals(convertedTypeName)) {
-                return ColumnDeclareType.SIZE;
-            }
-        }
-
-        for (String x : STANDARD_SIZE_AND_SCALE_TYPE_NAMES) {
-            if (x.equals(convertedTypeName)) {
-                return ColumnDeclareType.SIZE_AND_SCALE;
-            }
-        }
-
-        return ColumnDeclareType.SIMPLE;
-    }
 
     public PreparedStatement prepareBatchInsertStatement(String toTable, JdbcSchema toTableSchema, Optional<MergeConfig> mergeConfig) throws SQLException
     {

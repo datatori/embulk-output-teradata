@@ -6,7 +6,9 @@ plugins {
 }
 import com.github.jrubygradle.JRubyExec
 repositories {
-    mavenCentral()
+    maven {
+        url("https://plugins.gradle.org/m2/")
+    }
     jcenter()
 }
 configurations {
@@ -21,6 +23,7 @@ targetCompatibility = 1.7
 dependencies {
     compile  "org.embulk:embulk-core:0.8.2"
     provided "org.embulk:embulk-core:0.8.2"
+    compile  files('lib/embulk-output-jdbc-0.7.11.jar')
     compile  files('lib/tdgssconfig.jar')
     compile  files('lib/terajdbc4.jar')
 

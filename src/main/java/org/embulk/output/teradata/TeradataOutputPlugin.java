@@ -1,25 +1,26 @@
 package org.embulk.output.teradata;
 
 import java.util.Properties;
-import java.sql.Driver;
 import java.io.IOException;
-import java.sql.Connection;
 import java.sql.SQLException;
 
 import com.google.common.base.Optional;
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableSet;
 
 import org.embulk.config.Config;
 import org.embulk.config.ConfigDefault;
-import org.embulk.output.jdbc.*;
-import org.embulk.output.teradata.TeradataOutputConnection;
+import org.embulk.output.jdbc.AbstractJdbcOutputPlugin;
+import org.embulk.output.jdbc.BatchInsert;
+import org.embulk.output.jdbc.MergeConfig;
+import org.embulk.output.teradata.jdbc.TeradataBatchInsert;
+import org.embulk.output.teradata.jdbc.TeradataOutputConnector;
 
 public class TeradataOutputPlugin
         extends AbstractJdbcOutputPlugin
 {
 
-    public interface GenericPluginTask extends PluginTask
+    public interface TeradataPluginTask
+            extends PluginTask
     {
         @Config("url")
         public String getUrl();
@@ -44,22 +45,22 @@ public class TeradataOutputPlugin
     @Override
     protected Class<? extends PluginTask> getTaskClass()
     {
-        return GenericPluginTask.class;
+        return TeradataPluginTask.class;
     }
 
     @Override
     protected Features getFeatures(PluginTask task)
     {
-        GenericPluginTask t = (GenericPluginTask) task;
+        TeradataPluginTask t = (TeradataPluginTask) task;
         return new Features()
             .setMaxTableNameLength(t.getMaxTableNameLength())
             .setSupportedModes(ImmutableSet.of(Mode.INSERT, Mode.INSERT_DIRECT, Mode.TRUNCATE_INSERT, Mode.REPLACE));
     }
 
     @Override
-    protected GenericOutputConnector getConnector(PluginTask task, boolean retryableMetadataOperation)
+    protected TeradataOutputConnector getConnector(PluginTask task, boolean retryableMetadataOperation)
     {
-        GenericPluginTask t = (GenericPluginTask) task;
+        TeradataPluginTask t = (TeradataPluginTask) task;
 
         Properties props = new Properties();
 
@@ -73,52 +74,12 @@ public class TeradataOutputPlugin
             props.setProperty("password", t.getPassword().get());
         }
 
-        return new GenericOutputConnector(t.getUrl(), props, null, null);
-    }
-
-    private static class GenericOutputConnector
-            implements JdbcOutputConnector
-    {
-        private final Driver driver;
-        private final String url;
-        private final Properties properties;
-        private final String schemaName;
-
-        public GenericOutputConnector(String url, Properties properties, String driverClass,
-                String schemaName)
-        {
-            try {
-                // TODO check Class.forName(driverClass) is a Driver before newInstance
-                //      for security
-                this.driver = new com.teradata.jdbc.TeraDriver();
-            } catch (Exception ex) {
-                throw Throwables.propagate(ex);
-            }
-            this.url = url;
-            this.properties = properties;
-            this.schemaName = schemaName;
-        }
-
-        @Override
-        public JdbcOutputConnection connect(boolean autoCommit) throws SQLException
-        {
-            Connection c = driver.connect(url, properties);
-            try {
-                c.setAutoCommit(autoCommit);
-                JdbcOutputConnection con = new JdbcOutputConnection(c, schemaName);
-                c = null;
-                return con;
-            } finally {
-                if (c != null) {
-                    c.close();
-                }
-            }
-        }
+        return new TeradataOutputConnector(t.getUrl(), props);
     }
 
     @Override
     protected BatchInsert newBatchInsert(PluginTask task, Optional<MergeConfig> mergeConfig) throws IOException, SQLException
     {
-        return new StandardBatchInsert(getConnector(task, true), mergeConfig);
+        return new TeradataBatchInsert(getConnector(task, true), mergeConfig);
     }
 }
