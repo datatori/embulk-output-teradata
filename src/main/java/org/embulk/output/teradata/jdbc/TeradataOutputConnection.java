@@ -75,7 +75,7 @@ public class TeradataOutputConnection
     @Override
     protected String buildCreateTableIfNotExistsSql(TableIdentifier table, JdbcSchema schema) {
         StringBuilder sb = new StringBuilder();
-        sb.append("CREATE TABLE ");
+        sb.append("CREATE MULTISET TABLE ");
         this.quoteTableIdentifier(sb, table);
         sb.append(this.buildCreateTableSchemaSql(schema));
         return sb.toString();
@@ -106,6 +106,16 @@ public class TeradataOutputConnection
       }
       return true;
     }
+
+    @Override
+    protected String buildCreateTableSql(TableIdentifier table, JdbcSchema schema) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE MULTISET TABLE ");
+        this.quoteTableIdentifier(sb, table);
+        sb.append(this.buildCreateTableSchemaSql(schema));
+        return sb.toString();
+    }
+
 
     protected String buildCreateTableSchemaSql(JdbcSchema schema)
     {
